@@ -156,6 +156,88 @@ uv run ./generate_feeds.py -v        # Basic info
 uv run ./generate_feeds.py -vv       # Detailed progress (with --all)
 ```
 
+### `--config` / `-c`
+Specify a custom config file path:
+```bash
+uv run ./generate_feeds.py --config /path/to/config.ini
+uv run ./generate_feeds.py -c ./my-config.ini
+```
+
+## Docker Usage
+
+A pre-built Docker image is available at `ghcr.io/nikdoof/foursquare-feeds` for easy deployment and automation.
+
+### Quick Start
+
+Run with a local config file:
+
+```bash
+docker run --rm \
+  -v $(pwd)/config.ini:/app/config/config.ini:ro \
+  ghcr.io/nikdoof/foursquare-feeds:latest \
+  --kind ics
+```
+
+### Volume Mounts
+
+The container expects the config file at `/app/config/config.ini`. You can mount your config file using:
+
+- **Bind mount**: `-v /host/path/config.ini:/app/config/config.ini:ro`
+- **Volume**: `-v config-volume:/app/config` (with config.ini in the volume)
+- **ConfigMap/Secret** (in Kubernetes)
+
+### Container Arguments
+
+The container accepts all the same arguments as the script:
+
+```bash
+# Sync to CalDAV
+docker run --rm -v $(pwd)/config.ini:/app/config/config.ini:ro \
+  ghcr.io/nikdoof/foursquare-feeds:latest --kind caldav
+
+# Fetch all check-ins with verbose output
+docker run --rm -v $(pwd)/config.ini:/app/config/config.ini:ro \
+  ghcr.io/nikdoof/foursquare-feeds:latest --all -v
+```
+
+### Kubernetes CronJob Example
+
+For automated syncing, you can deploy as a Kubernetes CronJob:
+
+```yaml
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: foursquare-feeds
+  namespace: jobs
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: foursquare-feeds
+              image: ghcr.io/nikdoof/foursquare-feeds:latest
+              args: ["-k", "caldav"]
+              volumeMounts:
+                - name: foursquare-feeds-config
+                  mountPath: /app/config/config.ini
+                  subPath: config.ini
+          restartPolicy: OnFailure
+          volumes:
+            - name: foursquare-feeds-config
+              secret:
+                secretName: foursquare-feeds-config
+```
+
+This example:
+- Runs every 5 minutes
+- Syncs check-ins to CalDAV
+- Uses a Kubernetes Secret for configuration
+- Stores the config as `config.ini` in the secret
+
 ## What Gets Exported
 
 Each check-in becomes a calendar event with:
