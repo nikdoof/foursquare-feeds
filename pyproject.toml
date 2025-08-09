@@ -1,6 +1,6 @@
 [project]
 name = "foursquare-feeds"
-version = "2.3.1"
+version = "2.4.0"
 description = "A python script for generating an iCal feed from your Foursquare checkins"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,4 +8,11 @@ dependencies = [
 	"caldav>=2.0.1",
 	"foursquare",
 	"ics",
+	"requests>=2.32.4",
+	"urllib3>=2.5.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.8",
 ]
