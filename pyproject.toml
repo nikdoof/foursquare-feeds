@@ -8,5 +8,4 @@ dependencies = [
 	"caldav>=2.0.1",
 	"foursquare",
 	"ics",
-	"simplekml",
 ]

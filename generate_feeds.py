@@ -16,7 +16,7 @@ current_dir = os.path.realpath(os.path.dirname(__file__))
 CONFIG_FILE = os.path.join(current_dir, "config.ini")
 
 # The kinds of file we can generate:
-VALID_KINDS = ["ics", "kml", "caldav"]
+VALID_KINDS = ["ics", "caldav"]
 
 
 class FeedGenerator:
@@ -44,7 +44,6 @@ class FeedGenerator:
 
         self.api_access_token = config.get("Foursquare", "AccessToken")
         self.ics_filepath = config.get("Local", "IcsFilepath")
-        self.kml_filepath = config.get("Local", "KmlFilepath")
         self.caldav_url = config.get("CalDAV", "url", fallback=None)
         self.caldav_username = config.get("CalDAV", "username", fallback=None)
         self.caldav_password = config.get("CalDAV", "password", fallback=None)
@@ -64,11 +63,12 @@ class FeedGenerator:
         self.logger.info("Fetched {} checkin{} from the API".format(len(checkins), plural))
 
         if kind == "ics":
-            filepath = self._generate_ics_file(checkins)
-        elif kind == "kml":
-            filepath = self._generate_kml_file(checkins)
+            calendar = self._generate_calendar(checkins)
 
-        self.logger.info("Generated file {}".format(filepath))
+            with open(self.ics_filepath, "w") as f:
+                f.writelines(calendar)
+
+            self.logger.info("Generated file {}".format(self.ics_filepath))
 
     def _get_recent_checkins(self) -> list:
         "Make one request to the API for the most recent checkins."
@@ -167,7 +167,7 @@ class FeedGenerator:
                 continue
 
             venue_name = checkin["venue"]["name"]
-            tz_offset = self._get_checkin_timezone(checkin)
+            tz_offset = tzoffset(None, checkin["timeZoneOffset"] * 60)
 
             e = Event()
             start = arrow.get(checkin["createdAt"]).replace(tzinfo=tz_offset)
@@ -209,91 +209,6 @@ class FeedGenerator:
 
         return c
 
-    def _generate_kml_file(self, checkins):
-        """Supplied with a list of checkin data from the API, generates
-        and saves a kml file.
-
-        Returns the filepath of the saved file.
-
-        Keyword arguments:
-        checkins -- A list of dicts, each one data about a single checkin.
-        """
-        import simplekml
-
-        user = self._get_user()
-
-        kml = simplekml.Kml()
-
-        # The original Foursquare files had a Folder with name and
-        # description like this, so:
-        names = [user.get("firstName", ""), user.get("lastName", "")]
-        user_name = " ".join(names).strip()
-        name = "foursquare checkin history for {}".format(user_name)
-        fol = kml.newfolder(name=name, description=name)
-
-        for checkin in checkins:
-            if "venue" not in checkin:
-                # I had some checkins with no data other than
-                # id, createdAt and source.
-                continue
-
-            venue_name = checkin["venue"]["name"]
-            tz_offset = self._get_checkin_timezone(checkin)
-            url = "https://foursquare.com/v/{}".format(checkin["venue"]["id"])
-
-            description = ['@<a href="{}">{}</a>'.format(url, venue_name)]
-            if "shout" in checkin and len(checkin["shout"]) > 0:
-                description.append('"{}"'.format(checkin["shout"]))
-            description.append("Timezone offset: {}".format(tz_offset))
-
-            coords = [
-                (
-                    checkin["venue"]["location"]["lng"],
-                    checkin["venue"]["location"]["lat"],
-                )
-            ]
-
-            visibility = 0 if "private" in checkin else 1
-
-            pnt = fol.newpoint(
-                name=venue_name,
-                description="<![CDATA[{}]]>".format("\n".join(description)),
-                coords=coords,
-                visibility=visibility,
-                # Both of these were set like this in Foursquare's original KML:
-                altitudemode=simplekml.AltitudeMode.relativetoground,
-                extrude=1,
-            )
-
-            # Foursquare's KML feeds had 'updated' and 'published' elements
-            # in the Placemark, but I don't *think* those are standard, so:
-            pnt.timestamp.when = arrow.get(
-                checkin["createdAt"],
-                tzinfo=self._get_checkin_timezone(checkin),
-            ).isoformat()
-
-            # Use the address, if any:
-            if "location" in checkin["venue"]:
-                loc = checkin["venue"]["location"]
-                if "formattedAddress" in loc and len(loc["formattedAddress"]) > 0:
-                    address = ", ".join(loc["formattedAddress"])
-                    # While simplexml escapes other strings, it threw a wobbly
-                    # over '&' in addresses, so escape them:
-                    pnt.address = xml_escape(address)
-
-        kml.save(self.kml_filepath)
-
-        return self.kml_filepath
-
-    def _get_checkin_timezone(self, checkin):
-        """Given a checkin from the API, returns an arrow timezone object
-        representing the timezone offset of that checkin.
-
-        Keyword arguments
-        checkin -- A dict of data about a single checkin
-        """
-        return tzoffset(None, checkin["timeZoneOffset"] * 60)
-
     def sync_calendar_to_caldav(self):
         """
         Syncs all events from the generated calendar to a CalDAV server.
@@ -328,29 +243,9 @@ class FeedGenerator:
             cal = principal.make_calendar(name=self.caldav_calendar_name)
 
         self.logger.debug("Calendar has {} events".format(len(calendar.events)))
+
         # Upload each event from the ics.Calendar object
         for event in calendar.events:
-            # Each event must have a unique UID
-            # Use the event UID if present, otherwise generate a deterministic one from checkin ID
-            if not event.uid:
-                # Try to extract checkin ID from event.url or event.name as fallback
-                checkin_id = None
-                if hasattr(event, "url") and event.url:
-                    # URL format: .../checkin/<checkin_id>
-                    parts = event.url.rstrip("/").split("/")
-                    if "checkin" in parts:
-                        idx = parts.index("checkin")
-                        if idx + 1 < len(parts):
-                            checkin_id = parts[idx + 1]
-                if not checkin_id and hasattr(event, "uid") and event.uid:
-                    # fallback: try to parse from event.uid
-                    if "@" in event.uid:
-                        checkin_id = event.uid.split("@")[0]
-                if not checkin_id:
-                    # fallback: use event.name
-                    checkin_id = event.name
-                # Generate a repeatable UID using a namespace and checkin_id
-                event.uid = "{}@foursquare.com".format(checkin_id)
             self.logger.debug("Uploading event with UID: {}".format(event.uid))
             cal.add_event(event.serialize())
 
@@ -375,7 +270,7 @@ def main():
         "-k",
         "--kind",
         action="store",
-        help="Either ics, kml, or caldav. Default is ics.",
+        help="Either ics, or caldav. Default is ics.",
         choices=VALID_KINDS,
         default="ics",
         required=False,
@@ -411,8 +306,6 @@ def main():
         # Generate the requested kind of file
         generator.generate(kind=args.kind)
 
-    return 0
-
 if __name__ == "__main__":
     import sys
-    sys.exit(main())
+    sys.exit(main() or 0)

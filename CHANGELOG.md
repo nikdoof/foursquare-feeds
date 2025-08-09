@@ -1,10 +1,10 @@
 # Changelog
 
-## 2.3.1 - 2025-08-??
+## 2.4.0 - 2025-08-??
 
 - Add support for pushing events to a CalDAV server.
-- Add a more detailed description to the events
--
+- Add a more detailed description to the events.
+- Remove KML support.
 
 ## 2.3.0 - 2024-11-30
 

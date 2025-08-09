@@ -1,177 +1,182 @@
 # Foursquare Feeds
 
-A Python script that will generate iCal (`.ics`) or KML files of your checkins on [Foursquare][4sq]/[Swarm][swarm].
+A Python tool that downloads your check-ins from [Foursquare][4sq]/[Swarm][swarm] and converts them into calendar events. You can either generate an iCal (`.ics`) file or sync directly to a CalDAV server.
 
-If you set it up to save the iCal file to a publicly-visible location on a webserver, and run the script regularly, you can subscribe to the feed in your favourite calendar application.
-
-A KML file can be loaded into a mapping application (such as Google Earth or
-Maps) to view the checkins on a map.
-
-Foursquare [used to have such feeds][feeds] but they've stopped working for me.
-[I wrote a bit about this.][blog]
+Perfect for keeping a record of your travels and activities in your preferred calendar application.
 
 [4sq]: https://foursquare.com
 [swarm]: https://www.swarmapp.com
-[feeds]: https://foursquare.com/feeds/
-[blog]: https://www.gyford.com/phil/writing/2019/05/13/foursquare-swarm-ical-feed/
 
+## Features
+
+- **iCal Export**: Generate `.ics` files that can be imported into any calendar application
+- **CalDAV Sync**: Upload check-ins directly to CalDAV servers (Google Calendar, iCloud, etc.)
+- **Flexible Fetching**: Get recent check-ins or your entire history
+- **Rich Event Data**: Includes location details, notes (shouts), and check-in metadata
 
 ## Installation
 
-This should work with python 3.12 (and maybe others).
+This project requires Python 3.12+ and uses [uv](https://github.com/astral-sh/uv) for dependency management.
 
-### 1. Make a Foursquare app
+### 1. Install uv
 
-Go to https://foursquare.com/developers/apps and create a new App.
+If you don't have uv installed:
 
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-### 2. Install python requirements
+### 2. Set up the project
 
-Either using [uv](https://github.com/astral-sh/uv):
+Clone the repository and create a virtual environment:
 
-    $ uv sync
+```bash
+git clone https://github.com/nikdoof/foursquare-feeds.git
+cd foursquare-feeds
+uv sync
+```
 
-or [pip](https://pip.pypa.io/en/stable/):
+### 3. Create a Foursquare app
 
-    $ pip install -r requirements.txt
+1. Go to https://foursquare.com/developers/apps
+2. Create a new App
+3. Note your Client ID and Client Secret
 
+### 4. Configure the application
 
-### 3. Set up config file
+Copy the example configuration file:
 
-Copy `config_example.ini` to `config.ini`.
+```bash
+cp config_example.ini config.ini
+```
 
-Change the `IcsFilepath` and `KmlFilepath` to wherever you want your files to be saved.
+Edit `config.ini` with your settings:
 
-To get the `AccessToken` for your Foursquare app, you will have to go through the sometimes laborious procedure in step 4...
+- **AccessToken**: Your Foursquare access token (see below)
+- **IcsFilepath**: Where to save the `.ics` file (for local export)
+- **CalDAV settings**: Your CalDAV server details (for direct sync)
 
+## Getting an Access Token
 
-### 4. Get an access token
+You need a Foursquare access token to use this tool. Here are two methods:
 
-There are two ways to do this: (A) The quick way, using a third-party website or (B) the slow way, on the command line. Use (A) unless the website isn't working.
+### Method A: Quick Web-based Authentication
 
-#### (A) The quick way
+1. Visit https://your-foursquare-oauth-token.glitch.me
+2. Follow the Foursquare login link
+3. Accept the permissions
+4. Copy the access token into your `config.ini`
 
-Go to https://your-foursquare-oauth-token.glitch.me and follow the link to log
-in with Foursquare.
+*Thanks to [Simon Willison](https://github.com/dogsheep/swarm-to-sqlite/issues/4) for this tool.*
 
-Accept the permissions, and then copy the long code, which is your Access
-Token, into your `config.ini`.
+### Method B: Manual OAuth Flow
 
-That's it. [Thanks to Simon Willison for that.](https://github.com/dogsheep/swarm-to-sqlite/issues/4)
-
-#### (B) The slow way
-
-On https://foursquare.com/developers/apps, in your app, set the Redirect URI to `http://localhost:8000/`
-
-In a terminal window, open a python shell:
-
-    $ python
-
-and, using your app's Client ID and Client Secret in place of `YOUR_CLIENT_ID` and `YOUR_CLIENT_SECRET` enter this:
+1. Set your app's Redirect URI to `http://localhost:8000/` in the Foursquare developer console
+2. Run the following Python commands:
 
 ```python
 import foursquare
-client = foursquare.Foursquare(client_id='YOUR_CLIENT_ID' client_secret='YOUR_CLIENT_SECRET', redirect_uri='http://localhost:8000')
-client.oauth.auth_url()
+client = foursquare.Foursquare(
+    client_id='YOUR_CLIENT_ID',
+    client_secret='YOUR_CLIENT_SECRET',
+    redirect_uri='http://localhost:8000'
+)
+print(client.oauth.auth_url())
 ```
 
-This will output something like:
-
-    'https://foursquare.com/oauth2/authenticate?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8000%2F'
-
-Copy the URL from your terminal *without the surrounding quotes* and paste it into a web browser.
-
-Your browser should redirect to a URL like the one below, with an error about not being able to connect to the server (unless you have a webserver running locally on your machine):
-
-    http://localhost:8000/?code=XX_CODE_RETURNED_IN_REDIRECT_XX#_=_
-
-Copy the code represented by `XX_CODE_RETURNED_IN_REDIRECT_XX` (note that there may be an extra `#_=_` on the end which *you should not copy*).
-
-Back in your python shell, with that code, enter this, replacing
-`XX_CODE_RETURNED_IN_REDIRECT_XX` with the code you just copied:
+3. Visit the printed URL in your browser
+4. Copy the code from the redirect URL
+5. Get your token:
 
 ```python
-client.oauth.get_token('XX_CODE_RETURNED_IN_REDIRECT_XX')
+client.oauth.get_token('YOUR_CODE_HERE')
 ```
 
-This will output another long code, which is your Access Token.
+## Usage
 
-Enter this in your `config.ini`.
+### Generate an iCal file
 
-
-## Run the script
-
-Generate a `.ics` file:
-
-    $ ./generate_feeds.py
-
-This should create an `.ics` file containing up to 250 of your most recent
-checkins (see `--all` argument below to get more).
-
-If the file is generated in a location on your website that's publicly-visible, you should be able to subscribe to it from a calendar application. Then run the script periodically to have it update.
-
-Note that the file might contain private checkins or information you don't want to be public. In which case, it's probably best to make the name of any such publicly-readable file very obscure.
-
-To generate a `.kml` file, see the `kind` option below.
-
-
-### Script options
-
-#### `--all`
-
-By default the script only fetches the most recent 250 checkins. To fetch ALL checkins add the `--all` flag:
+Create a `.ics` file with your recent check-ins:
 
 ```bash
-$ ./generate_feeds.py --all
+uv run ./generate_feeds.py
 ```
 
-Depending on how many checkins you have you might only want to run it with
-`--all` the first time and, once that's imported into a calendar application,
-subsequently only fetch recent checkins.
-
-### `-k` or `--kind`
-
-By default the script generates an iCal `.ics` file. Or, use this option to
-specify an `.ics` file or a `.kml` file:
+Get all your check-ins (may take a while):
 
 ```bash
-$ ./generate_feeds.py -k ics
-$ ./generate_feeds.py -k kml
-$ ./generate_feeds.py --kind=ics
-$ ./generate_feeds.py --kind=kml
+uv run ./generate_feeds.py --all
 ```
 
-#### `-v` or `--verbose`
+### Sync to CalDAV
 
-By default the script will only output text if something goes wrong. To get
-brief output use `-v` or `--verbose`:
+Upload check-ins directly to a CalDAV server:
 
 ```bash
-$ ./generate_feeds.py -v
-Fetched 250 checkins from the API
-Generated calendar file ./mycalendar.ics
+uv run ./generate_feeds.py --kind caldav
 ```
 
-If fetching `--all` checkins then increasing the verbosity with another `-v`
-will show more info than the above:
+Make sure your CalDAV settings are configured in `config.ini`.
 
+## Configuration
+
+The `config.ini` file supports these sections:
+
+### [Foursquare]
+- `AccessToken`: Your Foursquare API access token
+
+### [Local]
+- `IcsFilepath`: Path where the `.ics` file should be saved
+
+### [CalDAV]
+- `url`: Your CalDAV server URL
+- `username`: CalDAV username
+- `password`: CalDAV password
+- `calendar_name`: Name of the calendar to create/use
+
+## Command Line Options
+
+### `--all`
+Fetch all check-ins instead of just the recent 250:
 ```bash
-$ ./generate_feeds.py -vv --all
-5746 checkins to fetch
-Fetched checkins 1-250
-Fetched checkins 251-500
-[etc...]
-Fetched checkins 5501-5750
-Fetched 5744 checkins from the API
-Generated calendar file ./mycalendar.ics
+uv run ./generate_feeds.py --all
 ```
 
-(No I don't know why it fetched 2 fewer checkins than it says I have.)
+### `--kind` / `-k`
+Specify output type (`ics` or `caldav`):
+```bash
+uv run ./generate_feeds.py --kind ics
+uv run ./generate_feeds.py --kind caldav
+```
 
+### `--verbose` / `-v`
+Enable verbose output:
+```bash
+uv run ./generate_feeds.py -v        # Basic info
+uv run ./generate_feeds.py -vv       # Detailed progress (with --all)
+```
+
+## What Gets Exported
+
+Each check-in becomes a calendar event with:
+
+- **Title**: "@ [Venue Name]"
+- **Location**: Venue name and address
+- **Time**: 15-minute event starting at check-in time
+- **Description**: Your shout/comment, plus metadata like:
+  - Days since last visit
+  - Mayor status at the time
+- **URL**: Link to the check-in on Foursquare
+
+## Privacy Considerations
+
+- Check-ins may contain private information
+- If hosting `.ics` files publicly, use obscure filenames
+- Consider filtering private check-ins before sharing
 
 ## About
 
-By Phil Gyford  
-phil@gyford.com  
-https://www.gyford.com  
-https://github.com/philgyford/foursquare-feeds
+**Original Author**: Phil Gyford
+**Repository**: https://github.com/philgyford/foursquare-feeds
+
+This tool exists because Foursquare's [official feeds](https://foursquare.com/feeds/) stopped working reliably. [Read more about the original motivation of Phil to create the tool](https://www.gyford.com/phil/writing/2019/05/13/foursquare-swarm-ical-feed/).
