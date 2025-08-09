@@ -4,7 +4,6 @@ import configparser
 import logging
 import os
 from datetime import timedelta
-from xml.sax.saxutils import escape as xml_escape
 
 import arrow
 import caldav
@@ -22,13 +21,13 @@ VALID_KINDS = ["ics", "caldav"]
 class FeedGenerator:
     fetch = "recent"
 
-    def __init__(self, fetch="recent"):
+    def __init__(self, config_file=CONFIG_FILE, fetch="recent"):
         "Loads config, sets up Foursquare API client."
 
         self.fetch = fetch
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        self._load_config(CONFIG_FILE)
+        self._load_config(config_file)
 
         self.client = foursquare.Foursquare(access_token=self.api_access_token)
 
@@ -284,6 +283,14 @@ def main():
         help="-v or --verbose for brief output; -vv for more.",
         required=False,
     )
+    parser.add_argument(
+        "-c",
+        "--config",
+        action="store",
+        help="Path to config file. Default is 'config.ini' in the current directory.",
+        required=False,
+        default=CONFIG_FILE,
+    )
 
     args = parser.parse_args()
 
@@ -298,7 +305,7 @@ def main():
     else:
         to_fetch = "recent"
 
-    generator = FeedGenerator(fetch=to_fetch)
+    generator = FeedGenerator(config_file=args.config, fetch=to_fetch)
 
     if args.kind == "caldav":
         generator.sync_calendar_to_caldav()
