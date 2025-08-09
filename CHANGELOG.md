@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.1 - 2025-08-??
+
+- Add support for pushing events to a CalDAV server.
+- Add a more detailed description to the events
+-
+
 ## 2.3.0 - 2024-11-30
 
 ### Added
