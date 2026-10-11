@@ -5,7 +5,11 @@ name: Build Container
     branches:
       - main
     tags:
-      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]*.[0-9]*.[0-9]*"
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   docker:
